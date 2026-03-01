@@ -11,7 +11,7 @@ trigger:
       - functionapp/**
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Default'
 
 variables:
   azureSubscription: 'Azure-Service-Connection'  # Update with your service connection name
