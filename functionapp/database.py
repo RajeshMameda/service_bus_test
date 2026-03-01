@@ -80,4 +80,6 @@ def get_order(order_id: str):
                 """,
                 (order_id,),
             )
-            return cur.fetchone()
+            result = cur.fetchone()
+    conn.close()
+    return result
