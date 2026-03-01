@@ -69,12 +69,14 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: AzureFunctionApp@1
+                - task: AzureCLI@2
                   displayName: 'Deploy Azure Function App'
                   inputs:
                     azureSubscription: '$(azureSubscription)'
-                    appType: 'functionAppLinux'
-                    appName: '$(functionAppName)'
-                    package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
-                    runtimeStack: 'PYTHON|$(pythonVersion)'
-                    deploymentMethod: 'zipDeploy'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az functionapp deployment source config-zip \
+                        --resource-group $(resourceGroup) \
+                        --name $(functionAppName) \
+                        --src $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
