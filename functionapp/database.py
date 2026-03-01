@@ -1,24 +1,10 @@
 import os
-import json
-import logging
 
-import psycopg2
-import azure.functions as func
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
+import psycopg
 
-REQUIRED_KEYS = ["order_id", "customer_id", "product_id", "quantity", "price"]
 
-def main(msg: func.ServiceBusMessage):
-    body = msg.get_body().decode("utf-8")
-    logging.info("Received order message: %s", body)
-
-    data = json.loads(body)
-
-    missing = [k for k in REQUIRED_KEYS if k not in data]
-    if missing:
-        raise ValueError(f"Missing required keys: {missing}")
-
-    conn = psycopg2.connect(
+def get_conn():
+    return psycopg.connect(
         host=os.environ["PGHOST"],
         port=os.environ.get("PGPORT", "5432"),
         dbname=os.environ["PGDATABASE"],
@@ -27,6 +13,9 @@ def main(msg: func.ServiceBusMessage):
         sslmode=os.environ.get("PGSSLMODE", "require"),
     )
 
+
+def upsert_order_validated(data: dict):
+    conn = get_conn()
     with conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -51,21 +40,44 @@ def main(msg: func.ServiceBusMessage):
                     "validated",
                 ),
             )
-
     conn.close()
-    logging.info("Order %s upserted to Postgres with status=validated", data["order_id"])
 
-    conn_str = os.environ["ServiceBusConnection"]
-    confirmations_queue = os.getenv("CONFIRMATIONS_QUEUE_NAME", "order-confirmations")
 
-    confirmation_payload = {
-        "order_id": data["order_id"],
-        "status": "confirmed"
-    }
+def set_order_status(order_id: str, status: str):
+    conn = get_conn()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE orders
+                SET status = %s,
+                    updated_at = NOW()
+                WHERE order_id = %s;
+                """,
+                (status, order_id),
+            )
 
-    with ServiceBusClient.from_connection_string(conn_str) as client:
-        sender = client.get_queue_sender(queue_name=confirmations_queue)
-        with sender:
-            sender.send_messages(ServiceBusMessage(json.dumps(confirmation_payload)))
+            if cur.rowcount == 0:
+                cur.execute(
+                    """
+                    INSERT INTO orders (order_id, status, updated_at)
+                    VALUES (%s, %s, NOW());
+                    """,
+                    (order_id, status),
+                )
+    conn.close()
 
-    logging.info("Confirmation sent for order_id=%s", data["order_id"])
+
+def get_order(order_id: str):
+    conn = get_conn()
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT order_id, customer_id, product_id, quantity, price, status, updated_at
+                FROM orders
+                WHERE order_id = %s;
+                """,
+                (order_id,),
+            )
+            return cur.fetchone()
