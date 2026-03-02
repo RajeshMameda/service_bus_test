@@ -9,6 +9,7 @@ trigger:
   paths:
     include:
       - functionapp/**
+      - azure-pipelines.yml
 
 pool:
   name: 'Default'
