@@ -15,7 +15,7 @@ pool:
 
 variables:
   azureSubscription: 'Azure-Service-Connection'  # Update with your service connection name
-  functionAppName: 'service-bus-consumption'     # Your Function App name (Consumption plan)
+  functionAppName: 'service-bus-test'            # Your Function App name
   resourceGroup: 'geo_data'                      # Your resource group
   pythonVersion: '3.11'                          # Azure Functions currently supports up to 3.11
   workingDirectory: '$(System.DefaultWorkingDirectory)/functionapp'
