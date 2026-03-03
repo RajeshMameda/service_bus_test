@@ -5,6 +5,7 @@ import azure.functions as func
 
 from database import get_order, set_order_status, upsert_order_validated
 from trigger import send_confirmation, send_order
+from ai_helper import parse_natural_language_order
 
 app = func.FunctionApp()
 
@@ -114,3 +115,58 @@ def get_order_http(req: func.HttpRequest) -> func.HttpResponse:
         status_code=200,
         mimetype="application/json",
     )
+
+@app.route(
+    route="orders/natural",
+    methods=["POST"],
+    auth_level=func.AuthLevel.ANONYMOUS,
+)
+def process_natural_order(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Process natural language order input using AI.
+    Example: {"text": "I need 10 MacBooks at $1200 each for customer John"}
+    """
+    try:
+        # Get natural language input
+        req_body = req.get_json()
+        natural_text = req_body.get("text")
+        
+        if not natural_text:
+            return func.HttpResponse(
+                json.dumps({"error": "Missing 'text' field in request body"}),
+                status_code=400,
+                mimetype="application/json",
+            )
+        
+        logging.info(f"Processing natural language order: {natural_text}")
+        
+        # Parse natural language to structured order using AI
+        order_data = parse_natural_language_order(natural_text)
+        
+        # Send to Service Bus (reuse existing logic)
+        send_order(order_data)
+        logging.info(f"AI-parsed order sent to Service Bus: {order_data['order_id']}")
+        
+        return func.HttpResponse(
+            json.dumps({
+                "message": "Natural language order processed successfully",
+                "parsed_order": order_data,
+                "order_id": order_data["order_id"]
+            }),
+            status_code=202,
+            mimetype="application/json",
+        )
+        
+    except ValueError as e:
+        return func.HttpResponse(
+            json.dumps({"error": str(e)}),
+            status_code=400,
+            mimetype="application/json",
+        )
+    except Exception as e:
+        logging.error(f"Error processing natural order: {e}")
+        return func.HttpResponse(
+            json.dumps({"error": "Failed to process natural language order"}),
+            status_code=500,
+            mimetype="application/json",
+        )
